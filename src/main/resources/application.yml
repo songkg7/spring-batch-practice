@@ -1,1 +1,18 @@
+spring:
+  profiles:
+    active: local
 
+---
+spring:
+  config:
+    activate:
+      on-profile: postgres
+  datasource:
+    hikari:
+      jdbc-url: jdbc:postgresql://localhost:5432/springbatch
+      username: haril
+      password: 1234
+      driver-class-name: org.postgresql.Driver
+  batch:
+    jdbc:
+      initialize-schema: always
