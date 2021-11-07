@@ -23,13 +23,17 @@ public class JobConfiguration {
         return jobBuilderFactory.get("job")
                 .start(step1())
                 .next(step2())
+                .next(step3())
                 .build();
     }
 
     @Bean
     public Step step1() {
         return stepBuilderFactory.get("step1")
-                .tasklet(new CustomTasklet())
+                .tasklet((contribution, chunkContext) -> {
+                    System.out.println("step2 was execute!");
+                    return RepeatStatus.FINISHED;
+                })
                 .build();
     }
 
@@ -37,7 +41,18 @@ public class JobConfiguration {
     public Step step2() {
         return stepBuilderFactory.get("step2")
                 .tasklet((contribution, chunkContext) -> {
-                    System.out.println("step2 was execute!");
+                    throw new RuntimeException("ERROR");
+//                    System.out.println("step2 was execute!");
+//                    return RepeatStatus.FINISHED;
+                })
+                .build();
+    }
+
+    @Bean
+    public Step step3() {
+        return stepBuilderFactory.get("step2")
+                .tasklet((contribution, chunkContext) -> {
+                    System.out.println("step3 was execute!");
                     return RepeatStatus.FINISHED;
                 })
                 .build();
