@@ -17,20 +17,12 @@ public class JobConfig {
     private final JobBuilderFactory jobBuilderFactory;
     private final StepBuilderFactory stepBuilderFactory;
 
-//    @Bean
-//    public Job batchJob1() {
-//        return jobBuilderFactory.get("batchJob1")
-//                .start(step1())
-//                .next(step2())
-//                .build();
-//    }
-
     @Bean
-    public Job batchJob2() {
+    public Job batchJob() {
         return jobBuilderFactory.get("batchJob2")
-                .start(flow())
-                .next(step5())
-                .end()
+                .start(step1())
+                .next(step2())
+                .next(step3())
                 .build();
     }
 
