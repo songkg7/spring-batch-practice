@@ -23,6 +23,7 @@ public class JobConfig {
                 .start(step1())
                 .next(step2())
                 .next(step3())
+                .validator(new CustomJobParametersValidator())
                 .build();
     }
 
