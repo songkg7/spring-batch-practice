@@ -25,6 +25,7 @@ public class JobConfig {
                 .next(step2())
                 .next(step3())
                 .validator(new DefaultJobParametersValidator(new String[]{"name", "date"}, new String[]{"count"}))
+                .preventRestart()
                 .build();
     }
 
