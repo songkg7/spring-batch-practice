@@ -25,10 +25,13 @@ public class JobConfig {
     @Bean
     public Job batchJob() {
         return jobBuilderFactory.get("batchJob")
-                .start(flowA())
-                .next(step3())
-                .next(flowB())
-                .next(step6())
+                .start(step1())
+                .on("FAILED").to(step2())
+                .on("FAILED").stop()
+                .from(step1())
+                .on("*").to(step3()).next(step4())
+                .from(step2())
+                .on("*").to(step5())
                 .end()
                 .build();
     }
