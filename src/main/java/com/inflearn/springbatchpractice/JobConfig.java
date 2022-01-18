@@ -2,6 +2,7 @@ package com.inflearn.springbatchpractice;
 
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
@@ -27,11 +28,7 @@ public class JobConfig {
         return jobBuilderFactory.get("batchJob")
                 .start(step1())
                 .on("FAILED").to(step2())
-                .on("FAILED").stop()
-                .from(step1())
-                .on("*").to(step3()).next(step4())
-                .from(step2())
-                .on("*").to(step5())
+                .on("PASS").stop()
                 .end()
                 .build();
     }
@@ -49,7 +46,10 @@ public class JobConfig {
     @Bean
     public Step step1() {
         return stepBuilderFactory.get("step1")
-                .tasklet((contribution, chunkContext) -> RepeatStatus.FINISHED)
+                .tasklet((contribution, chunkContext) -> {
+                    contribution.setExitStatus(ExitStatus.FAILED);
+                    return RepeatStatus.FINISHED;
+                })
                 .build();
     }
 
@@ -60,6 +60,7 @@ public class JobConfig {
                 .reader(new ListItemReader<>(List.of("die", "aloud", "division", "inch", "rather")))
                 .processor((ItemProcessor<String, String>) String::toUpperCase)
                 .writer(items -> items.forEach(System.out::println))
+                .listener(new PassCheckingListener())
                 .build();
     }
 
