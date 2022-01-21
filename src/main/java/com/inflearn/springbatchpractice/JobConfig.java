@@ -1,16 +1,18 @@
 package com.inflearn.springbatchpractice;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
-import org.springframework.batch.core.job.builder.FlowBuilder;
-import org.springframework.batch.core.job.flow.Flow;
 import org.springframework.batch.repeat.RepeatStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+@Slf4j
 @Configuration
 @RequiredArgsConstructor
 public class JobConfig {
@@ -20,23 +22,16 @@ public class JobConfig {
     @Bean
     public Job batchJob() {
         return jobBuilderFactory.get("batchJob")
-                .start(flow())
+                .start(step1(null))
                 .next(step3())
-                .end()
+                .listener(new CustomJobListener())
                 .build();
     }
 
     @Bean
-    public Flow flow() {
-        FlowBuilder<Flow> flowBuilder = new FlowBuilder<>("flow");
-        flowBuilder.start(step1())
-                .next(step2())
-                .end();
-        return flowBuilder.build();
-    }
-
-    @Bean
-    public Step step1() {
+    @JobScope
+    public Step step1(@Value("#{jobParameters['message']}") String message) {
+        log.info("message = {}", message);
         return stepBuilderFactory.get("step1")
                 .tasklet((contribution, chunkContext) -> RepeatStatus.FINISHED)
                 .build();
