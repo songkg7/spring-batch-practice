@@ -6,9 +6,7 @@ import lombok.Value;
 public class Customer {
 
     String name;
-
-    static Customer changeName(String name) {
-        return new Customer(name);
-    }
+    String hobby;
+    String introduction;
 
 }

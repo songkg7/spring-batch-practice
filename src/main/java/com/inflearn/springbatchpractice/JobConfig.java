@@ -1,12 +1,6 @@
 package com.inflearn.springbatchpractice;
 
-import com.inflearn.springbatchpractice.customer.CustomItemProcessor;
-import com.inflearn.springbatchpractice.customer.CustomItemReader;
-import com.inflearn.springbatchpractice.customer.CustomItemWriter;
 import com.inflearn.springbatchpractice.customer.Customer;
-import com.inflearn.springbatchpractice.customer.itemstream.CustomItemStreamReader;
-import com.inflearn.springbatchpractice.customer.itemstream.CustomItemStreamWriter;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
@@ -14,14 +8,13 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
-import org.springframework.batch.item.ItemProcessor;
-import org.springframework.batch.item.ItemReader;
-import org.springframework.batch.item.ItemStreamReader;
-import org.springframework.batch.item.ItemStreamWriter;
-import org.springframework.batch.item.ItemWriter;
-import org.springframework.batch.repeat.RepeatStatus;
+import org.springframework.batch.core.configuration.annotation.StepScope;
+import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
+import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ClassPathResource;
 
 @Slf4j
 @Configuration
@@ -34,7 +27,6 @@ public class JobConfig {
     public Job batchJob() {
         return jobBuilderFactory.get("batchJob")
                 .start(step1())
-                .next(step2())
                 .build();
     }
 
@@ -42,43 +34,24 @@ public class JobConfig {
     @JobScope
     Step step1() {
         return stepBuilderFactory.get("step1")
-                .<Customer, Customer>chunk(3)
-                .reader(itemStreamReader())
-                .writer(itemStreamWriter())
+                .<Customer, Customer>chunk(5)
+                .reader(flatFileReader())
+                .writer(items -> items.forEach(item -> log.info("item = {}", item)))
                 .build();
     }
 
+    // NOTE: 반환 유형에 주의, ItemReader 에는 open() method 가 없기 때문에 생각한대로 동작하지 않을 수 있다.
+    // 다형성을 위해 더 상위 클래스로 반환하는 것은 좋으나, 배치에서는 정확한 클래스를 리턴해주는 것이 좋을수도 있다.
     @Bean
-    ItemStreamReader<Customer> itemStreamReader() {
-        List<Customer> customers = List.of(Customer.of("user1"), Customer.of("user2"), Customer.of("user3"));
-        return new CustomItemStreamReader(customers);
-    }
+    @StepScope
+    FlatFileItemReader<Customer> flatFileReader() {
+        DefaultLineMapper<Customer> defaultLineMapper = new DefaultLineMapper<>(new DelimitedLineTokenizer(), new CustomerFieldSetMapper());
 
-    @Bean
-    ItemStreamWriter<Customer> itemStreamWriter() {
-        return new CustomItemStreamWriter();
-    }
-
-    @Bean
-    ItemReader<Customer> itemReader() {
-        return new CustomItemReader(
-                List.of(Customer.of("user1"), Customer.of("user2"), Customer.of("user3")));
-    }
-
-    @Bean
-    ItemProcessor<Customer, Customer> itemProcessor() {
-        return new CustomItemProcessor();
-    }
-
-    @Bean
-    ItemWriter<Customer> itemWriter() {
-        return new CustomItemWriter();
-    }
-
-    @Bean
-    Step step2() {
-        return stepBuilderFactory.get("step2")
-                .tasklet((contribution, chunkContext) -> RepeatStatus.FINISHED)
+        return new FlatFileItemReaderBuilder<Customer>()
+                .name("flatFileReader")
+                .resource(new ClassPathResource("/customer.csv"))
+                .linesToSkip(1)
+                .lineMapper(defaultLineMapper)
                 .build();
     }
 }
