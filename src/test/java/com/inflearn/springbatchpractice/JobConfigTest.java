@@ -1,7 +1,15 @@
 package com.inflearn.springbatchpractice;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.time.LocalTime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.batch.core.BatchStatus;
+import org.springframework.batch.core.ExitStatus;
+import org.springframework.batch.core.JobExecution;
+import org.springframework.batch.core.JobParameters;
+import org.springframework.batch.core.JobParametersBuilder;
 import org.springframework.batch.test.JobLauncherTestUtils;
 import org.springframework.batch.test.JobRepositoryTestUtils;
 import org.springframework.batch.test.context.SpringBatchTest;
@@ -26,7 +34,18 @@ class JobConfigTest {
     }
 
     @Test
-    void test_1() {
+    void test_1() throws Exception {
+        // given
+        JobParameters jobParameters = new JobParametersBuilder()
+                .addString("name", "user1")
+                .addLong("date", LocalTime.now().toNanoOfDay())
+                .toJobParameters();
 
+        // when
+        JobExecution jobExecution = jobLauncherTestUtils.launchJob(jobParameters);
+
+        // then
+        assertEquals(BatchStatus.COMPLETED, jobExecution.getStatus());
+        assertEquals(ExitStatus.COMPLETED, jobExecution.getExitStatus());
     }
 }
