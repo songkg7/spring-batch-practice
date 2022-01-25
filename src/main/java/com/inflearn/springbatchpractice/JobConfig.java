@@ -14,9 +14,6 @@ import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.NonTransientResourceException;
 import org.springframework.batch.item.ParseException;
 import org.springframework.batch.item.UnexpectedInputException;
-import org.springframework.batch.repeat.exception.ExceptionHandler;
-import org.springframework.batch.repeat.exception.SimpleLimitExceptionHandler;
-import org.springframework.batch.repeat.support.RepeatTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -41,35 +38,30 @@ public class JobConfig {
     Step step1() {
         return stepBuilderFactory.get("step1")
                 .<String, String>chunk(5)
-                .reader(new ItemReader<String>() {
+                .reader(new ItemReader<>() {
                     int i = 0;
+
                     @Override
-                    public String read() throws Exception, UnexpectedInputException, ParseException, NonTransientResourceException {
+                    public String read()
+                            throws Exception, UnexpectedInputException, ParseException, NonTransientResourceException {
                         i++;
+                        if (i == 1) {
+                            log.error("illegalArgumentException");
+                            throw new IllegalArgumentException("this exception is skipped");
+                        }
                         return i > 3 ? null : "item" + i;
                     }
                 })
-                .processor(new ItemProcessor<String, String>() {
-                    RepeatTemplate repeatTemplate = new RepeatTemplate();
-                    @Override
-                    public String process(String item) throws Exception {
-                        repeatTemplate.setExceptionHandler(simpleLimitExceptionHandler());
-
-                        repeatTemplate.iterate(context -> {
-                            log.info("repeatTemplate is testing");
-                            throw new RuntimeException("Exception is occurred");
-//                            return RepeatStatus.CONTINUABLE;
-                        });
-
-                        return item;
-                    }
+                .processor((ItemProcessor<String, String>) item -> {
+                    log.error("illegalStateException");
+                    throw new IllegalStateException("this exception is retried");
                 })
                 .writer(items -> items.forEach(item -> log.info("item = {}", item)))
+                .faultTolerant()
+                .skip(IllegalArgumentException.class)
+                .skipLimit(2)
+                .retry(IllegalStateException.class)
+                .retryLimit(3)
                 .build();
-    }
-
-    @Bean
-    ExceptionHandler simpleLimitExceptionHandler() {
-        return new SimpleLimitExceptionHandler(3);
     }
 }
