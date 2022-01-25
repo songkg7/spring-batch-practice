@@ -1,6 +1,5 @@
 package com.inflearn.springbatchpractice;
 
-import com.inflearn.springbatchpractice.customer.Customer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
@@ -9,15 +8,20 @@ import org.springframework.batch.core.configuration.JobRegistry;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
-import org.springframework.batch.core.configuration.annotation.StepScope;
-import org.springframework.batch.core.configuration.support.JobRegistryBeanPostProcessor;
-import org.springframework.batch.item.file.FlatFileItemReader;
-import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
-import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
-import org.springframework.beans.factory.config.BeanPostProcessor;
+import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.item.ItemProcessor;
+import org.springframework.batch.item.ItemReader;
+import org.springframework.batch.item.NonTransientResourceException;
+import org.springframework.batch.item.ParseException;
+import org.springframework.batch.item.UnexpectedInputException;
+import org.springframework.batch.repeat.CompletionPolicy;
+import org.springframework.batch.repeat.RepeatStatus;
+import org.springframework.batch.repeat.policy.CompositeCompletionPolicy;
+import org.springframework.batch.repeat.policy.SimpleCompletionPolicy;
+import org.springframework.batch.repeat.policy.TimeoutTerminationPolicy;
+import org.springframework.batch.repeat.support.RepeatTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.ClassPathResource;
 
 @Slf4j
 @Configuration
@@ -30,6 +34,7 @@ public class JobConfig {
     @Bean
     public Job batchJob() {
         return jobBuilderFactory.get("batchJob")
+                .incrementer(new RunIdIncrementer())
                 .start(step1())
                 .build();
     }
@@ -38,31 +43,41 @@ public class JobConfig {
     @JobScope
     Step step1() {
         return stepBuilderFactory.get("step1")
-                .<Customer, Customer>chunk(5)
-                .reader(flatFileReader())
+                .<String, String>chunk(5)
+                .reader(new ItemReader<String>() {
+                    int i = 0;
+                    @Override
+                    public String read() throws Exception, UnexpectedInputException, ParseException, NonTransientResourceException {
+                        i++;
+                        return i > 3 ? null : "item" + i;
+                    }
+                })
+                .processor(new ItemProcessor<String, String>() {
+                    RepeatTemplate repeatTemplate = new RepeatTemplate();
+                    @Override
+                    public String process(String item) throws Exception {
+
+                        // 종료 정책은 일반적으론 2가지 이상 설정할 수 없다.
+                        repeatTemplate.setCompletionPolicy(new SimpleCompletionPolicy(4));
+                        repeatTemplate.setCompletionPolicy(new TimeoutTerminationPolicy(3000));
+
+                        // 여러 정책을 복합적으로 사용하기 위해서 다음 클래스를 사용한다.
+                        CompositeCompletionPolicy compositeCompletionPolicy = new CompositeCompletionPolicy();
+                        CompletionPolicy[] completionPolicies = new CompletionPolicy[]{
+                                new SimpleCompletionPolicy(3), new TimeoutTerminationPolicy(3000) };
+
+                        compositeCompletionPolicy.setPolicies(completionPolicies);
+                        repeatTemplate.setCompletionPolicy(compositeCompletionPolicy);
+
+                        repeatTemplate.iterate(context -> {
+                            log.info("repeatTemplate is testing");
+                            return RepeatStatus.CONTINUABLE;
+                        });
+
+                        return item;
+                    }
+                })
                 .writer(items -> items.forEach(item -> log.info("item = {}", item)))
                 .build();
-    }
-
-    // NOTE: 반환 유형에 주의, ItemReader 에는 open() method 가 없기 때문에 생각한대로 동작하지 않을 수 있다.
-    // 다형성을 위해 더 상위 클래스로 반환하는 것은 좋으나, 배치에서는 정확한 클래스를 리턴해주는 것이 좋을수도 있다.
-    @Bean
-    @StepScope
-    FlatFileItemReader<Customer> flatFileReader() {
-        DefaultLineMapper<Customer> defaultLineMapper = new DefaultLineMapper<>(new DelimitedLineTokenizer(), new CustomerFieldSetMapper());
-
-        return new FlatFileItemReaderBuilder<Customer>()
-                .name("flatFileReader")
-                .resource(new ClassPathResource("/customer.csv"))
-                .linesToSkip(1)
-                .lineMapper(defaultLineMapper)
-                .build();
-    }
-
-    @Bean
-    BeanPostProcessor jobRegistryBeanPostProcessor() {
-        JobRegistryBeanPostProcessor jobRegistryBeanPostProcessor = new JobRegistryBeanPostProcessor();
-        jobRegistryBeanPostProcessor.setJobRegistry(jobRegistry);
-        return jobRegistryBeanPostProcessor;
     }
 }
