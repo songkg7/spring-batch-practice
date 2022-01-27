@@ -1,16 +1,20 @@
 package com.inflearn.springbatchpractice;
 
+import java.util.HashMap;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
-import org.springframework.batch.core.configuration.JobRegistry;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.core.step.skip.LimitCheckingItemSkipPolicy;
+import org.springframework.batch.core.step.skip.SkipPolicy;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
+import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.NonTransientResourceException;
 import org.springframework.batch.item.ParseException;
 import org.springframework.batch.item.UnexpectedInputException;
@@ -23,7 +27,6 @@ import org.springframework.context.annotation.Configuration;
 public class JobConfig {
     private final JobBuilderFactory jobBuilderFactory;
     private final StepBuilderFactory stepBuilderFactory;
-    private final JobRegistry jobRegistry;
 
     @Bean
     public Job batchJob() {
@@ -45,23 +48,35 @@ public class JobConfig {
                     public String read()
                             throws Exception, UnexpectedInputException, ParseException, NonTransientResourceException {
                         i++;
-                        if (i == 1) {
-                            log.error("illegalArgumentException");
-                            throw new IllegalArgumentException("this exception is skipped");
+                        if (i == 3) {
+                            throw new SkippableException("this exception is skipped");
                         }
-                        return i > 3 ? null : "item" + i;
+                        log.info("ItemReader : {}", i);
+                        return i > 20 ? null : String.valueOf(i);
                     }
                 })
-                .processor((ItemProcessor<String, String>) item -> {
-                    log.error("illegalStateException");
-                    throw new IllegalStateException("this exception is retried");
-                })
-                .writer(items -> items.forEach(item -> log.info("item = {}", item)))
+                .processor(itemProcessor())
+                .writer(itemWriter())
                 .faultTolerant()
-                .skip(IllegalArgumentException.class)
-                .skipLimit(2)
-                .retry(IllegalStateException.class)
-                .retryLimit(3)
+                .skipPolicy(limitCheckingItemSkipPolicy())
                 .build();
+    }
+
+    @Bean
+    public ItemProcessor<String, String> itemProcessor() {
+        return new SkipItemProcessor();
+    }
+
+    @Bean
+    public ItemWriter<String> itemWriter() {
+        return new SkipItemWriter();
+    }
+
+    @Bean
+    public SkipPolicy limitCheckingItemSkipPolicy() {
+        Map<Class<? extends Throwable>, Boolean> exceptionClass = new HashMap<>();
+        exceptionClass.put(SkippableException.class, true);
+
+        return new LimitCheckingItemSkipPolicy(3, exceptionClass);
     }
 }
