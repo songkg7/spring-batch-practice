@@ -41,6 +41,8 @@ public class JobConfig {
                 .processor(processor())
                 .writer(items -> items.forEach(item -> System.out.println("item = " + item)))
                 .faultTolerant()
+                .skip(RetryableException.class)
+                .skipLimit(2)
                 .retry(RetryableException.class)
                 .retryLimit(2)
                 .build();
