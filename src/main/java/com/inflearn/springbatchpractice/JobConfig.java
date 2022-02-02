@@ -1,6 +1,8 @@
 package com.inflearn.springbatchpractice;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import lombok.RequiredArgsConstructor;
@@ -12,10 +14,14 @@ import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.core.step.skip.LimitCheckingItemSkipPolicy;
+import org.springframework.batch.core.step.skip.SkipPolicy;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.retry.RetryPolicy;
+import org.springframework.retry.policy.SimpleRetryPolicy;
 
 @Slf4j
 @Configuration
@@ -41,10 +47,8 @@ public class JobConfig {
                 .processor(processor())
                 .writer(items -> items.forEach(item -> System.out.println("item = " + item)))
                 .faultTolerant()
-                .skip(RetryableException.class)
-                .skipLimit(2)
-                .retry(RetryableException.class)
-                .retryLimit(2)
+                .skipPolicy(skipPolicy())
+                .retryPolicy(retryPolicy())
                 .build();
     }
 
@@ -61,5 +65,19 @@ public class JobConfig {
                 .mapToObj(String::valueOf)
                 .collect(Collectors.toList());
         return new ListItemReader<>(items);
+    }
+
+    @Bean
+    SkipPolicy skipPolicy() {
+        Map<Class<? extends Throwable>, Boolean> exceptionClassMap = new HashMap<>();
+        exceptionClassMap.put(RetryableException.class, Boolean.TRUE);
+        return new LimitCheckingItemSkipPolicy(2, exceptionClassMap);
+    }
+
+    @Bean
+    RetryPolicy retryPolicy() {
+        Map<Class<? extends Throwable>, Boolean> exceptionClassMap = new HashMap<>();
+        exceptionClassMap.put(RetryableException.class, Boolean.TRUE);
+        return new SimpleRetryPolicy(2, exceptionClassMap);
     }
 }
