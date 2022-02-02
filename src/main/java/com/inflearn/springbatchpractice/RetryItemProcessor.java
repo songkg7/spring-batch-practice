@@ -6,9 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.classify.BinaryExceptionClassifier;
 import org.springframework.classify.Classifier;
-import org.springframework.retry.RecoveryCallback;
-import org.springframework.retry.RetryCallback;
-import org.springframework.retry.RetryContext;
 import org.springframework.retry.support.DefaultRetryState;
 import org.springframework.retry.support.RetryTemplate;
 
@@ -23,20 +20,12 @@ public class RetryItemProcessor implements ItemProcessor<String, Customer> {
     public Customer process(String item) throws Exception {
         Classifier<Throwable, Boolean> rollbackClassifier = new BinaryExceptionClassifier(true);
 
-        return retryTemplate.execute(new RetryCallback<Customer, RuntimeException>() {
-            @Override
-            public Customer doWithRetry(RetryContext context) throws RuntimeException {
-                if (item.equals("1") || item.equals("2")) {
-                    count++;
-                    throw new RetryableException("failed count : " + count);
-                }
-                return Customer.of(item);
+        return retryTemplate.execute(context -> {
+            if (item.equals("1") || item.equals("2")) {
+                count++;
+                throw new RetryableException("failed count : " + count);
             }
-        }, new RecoveryCallback<Customer>() {
-            @Override
-            public Customer recover(RetryContext context) throws Exception {
-                return Customer.of(item);
-            }
-        }, new DefaultRetryState(item, rollbackClassifier)); // RetryState 가 설정되어 있지 않으면 아이템이 단순 반복처리된다.
+            return Customer.of(item);
+        }, context -> Customer.of(item), new DefaultRetryState(item, rollbackClassifier)); // RetryState 가 설정되어 있지 않으면 아이템이 단순 반복처리된다.
     }
 }
