@@ -1,10 +1,12 @@
 package com.inflearn.springbatchpractice.customer;
 
+import java.time.LocalDateTime;
 import lombok.Value;
 
-@Value(staticConstructor = "of")
+@Value(staticConstructor = "create")
 public class Customer {
-
-    String item;
-
+    Long id;
+    String firstName;
+    String lastName;
+    LocalDateTime birthDate;
 }
