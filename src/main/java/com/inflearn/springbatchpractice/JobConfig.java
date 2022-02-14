@@ -11,9 +11,9 @@ import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
-import org.springframework.batch.integration.async.AsyncItemProcessor;
-import org.springframework.batch.integration.async.AsyncItemWriter;
+import org.springframework.batch.core.partition.support.Partitioner;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider;
 import org.springframework.batch.item.database.JdbcBatchItemWriter;
@@ -22,6 +22,7 @@ import org.springframework.batch.item.database.Order;
 import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
 import org.springframework.batch.item.database.builder.JdbcPagingItemReaderBuilder;
 import org.springframework.batch.item.database.support.PostgresPagingQueryProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
@@ -39,25 +40,50 @@ public class JobConfig {
     public Job batchJob() {
         return jobBuilderFactory.get("batchJob")
                 .incrementer(new RunIdIncrementer())
-                .start(step1())
+                .start(masterStep())
                 .build();
     }
 
     @Bean
-    public Step step1() {
-        return stepBuilderFactory.get("step1")
+    public Step masterStep() {
+        return stepBuilderFactory.get("masterStep")
+                .partitioner(slaveStep().getName(), partitioner())
+                .step(slaveStep())
+                .gridSize(4)
+                .taskExecutor(new SimpleAsyncTaskExecutor())
+                .build();
+    }
+
+    @Bean
+    public Step slaveStep() {
+        return stepBuilderFactory.get("slaveStep")
                 .<Customer, Customer>chunk(chunkSize)
-                .reader(pagingItemReader())
-                .processor(customItemProcessor())
+                .reader(pagingItemReader(null, null))
                 .writer(customItemWriter())
                 .build();
     }
 
     @Bean
-    public JdbcPagingItemReader<Customer> pagingItemReader() {
+    public Partitioner partitioner() {
+        ColumnRangePartitioner columnRangePartitioner = new ColumnRangePartitioner();
+        columnRangePartitioner.setColumn("id");
+        columnRangePartitioner.setDataSource(dataSource);
+        columnRangePartitioner.setTable("customer");
+        return columnRangePartitioner;
+    }
+
+    @Bean
+    @StepScope
+    public JdbcPagingItemReader<Customer> pagingItemReader(
+            @Value("#{stepExecutionContext['minValue']}") Long minValue,
+            @Value("#{stepExecutionContext['maxValue']}") Long maxValue
+    ) {
+        log.info("minValue: {}, maxValue: {}", minValue, maxValue);
+
         PostgresPagingQueryProvider queryProvider = new PostgresPagingQueryProvider();
         queryProvider.setSelectClause("id, firstName, lastName, birthDate");
         queryProvider.setFromClause("from customer");
+        queryProvider.setWhereClause("where id >= " + minValue + " and id <= " + maxValue);
         Map<String, Order> sortKeys = new HashMap<>();
         sortKeys.put("id", Order.ASCENDING);
         queryProvider.setSortKeys(sortKeys);
@@ -71,31 +97,7 @@ public class JobConfig {
     }
 
     @Bean
-    public Step asyncStep() {
-        return stepBuilderFactory.get("asyncStep")
-                .<Customer, Customer>chunk(chunkSize)
-                .reader(pagingItemReader())
-                .processor(asyncItemProcessor())
-                .writer(asyncItemWriter())
-                .build();
-    }
-
-    @Bean
-    public AsyncItemProcessor asyncItemProcessor() {
-        AsyncItemProcessor<Customer, Customer> asyncItemProcessor = new AsyncItemProcessor<>();
-        asyncItemProcessor.setDelegate(customItemProcessor());
-        asyncItemProcessor.setTaskExecutor(new SimpleAsyncTaskExecutor());
-        return asyncItemProcessor;
-    }
-
-    @Bean
-    public AsyncItemWriter asyncItemWriter() {
-        AsyncItemWriter<Customer> asyncItemWriter = new AsyncItemWriter<>();
-        asyncItemWriter.setDelegate(customItemWriter());
-        return asyncItemWriter;
-    }
-
-    @Bean
+    @StepScope
     public ItemProcessor<Customer, Customer> customItemProcessor() {
         try {
             TimeUnit.SECONDS.sleep(10);
@@ -107,6 +109,7 @@ public class JobConfig {
     }
 
     @Bean
+    @StepScope
     public JdbcBatchItemWriter<Customer> customItemWriter() {
         return new JdbcBatchItemWriterBuilder<Customer>()
                 .dataSource(dataSource)
