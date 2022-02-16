@@ -41,6 +41,8 @@ public class JobConfig {
         return jobBuilderFactory.get("batchJob")
                 .incrementer(new RunIdIncrementer())
                 .start(masterStep())
+                .listener(new CustomJobExecutionListener())
+                .listener(new CustomAnnotationJobListener())
                 .build();
     }
 
